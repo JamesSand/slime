@@ -62,7 +62,7 @@ EVAL_ARGS=(
    --eval-interval 5
    # 评估用的 Prompt 数据集
    # --eval-prompt-data aime $hf_model_folder/aime-2024/aime-2024.jsonl
-   --eval-prompt-data math500 /root/shared_folder/math_datasets/test-math500/test.jsonl gsm8k /root/shared_folder/math_datasets/test-gsm8k/test.jsonl
+   --eval-prompt-data math500 /root/shared_folder/math_datasets/test_math500/test.jsonl gsm8k /root/shared_folder/math_datasets/test_gsm8k/test.jsonl
    # 每个评估 Prompt 的采样数量
    --n-samples-per-eval-prompt 4
    # 评估时最大响应长度
