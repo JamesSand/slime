@@ -2,6 +2,9 @@
 
 # Zhizhou: modify from run-qwen3-4B-fsdp.sh
 
+# Zhizhou: not finished. Inspect parameters:
+# num samples, train batch size, temperatures
+
 # for rerun the task
 pkill -9 sglang
 sleep 3
@@ -22,7 +25,12 @@ source .env
 
 num_gpus=4
 hf_model_folder=/root/shared_folder/hf_models
-model_name=Qwen3-0.6B
+model_name=Llama-3.2-3B-Instruct
+
+max_response_len=$((1024 * 4))
+
+# Zhizhou: I think this is the wandb run name
+wandb_group=llama3.2-3B-fsdp-math-adam
 
 NVLINK_COUNT=$(nvidia-smi | grep -o "NVLink" | wc -l)
 if [ "$NVLINK_COUNT" -gt 0 ]; then
@@ -37,33 +45,34 @@ echo "HAS_NVLINK: $HAS_NVLINK (detected $NVLINK_COUNT NVLink references)"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 
 RUN_ID=${RUN_ID:-"run_$(date +%Y%m%d_%H%M%S)"}
-LOAD_SAVE_PATH="/root/shared_data/${RUN_ID}/checkpoints"
+LOAD_SAVE_PATH="/root/shared_folder/${RUN_ID}/checkpoints"
 
 CKPT_ARGS=(
    --hf-checkpoint $hf_model_folder/$model_name
    --load $hf_model_folder/$model_name
    --ref-load $hf_model_folder/$model_name
    # 训练过程中模型的保存路径
-   --save /root/shared_data/$model_name-test-1226/
+   --save /root/shared_folder/$model_name-test-1226/
    # 模型保存间隔（步数）
-   --save-interval 20
+   --save-interval 10
 )
 
 EVAL_ARGS=(
    # 评估间隔（Rollout 数）
    --eval-interval 5
    # 评估用的 Prompt 数据集
-   --eval-prompt-data aime $hf_model_folder/aime-2024/aime-2024.jsonl
+   # --eval-prompt-data aime $hf_model_folder/aime-2024/aime-2024.jsonl
+   --eval-prompt-data math500 /root/shared_folder/math_datasets/test-math500/test.jsonl gsm8k /root/shared_folder/math_datasets/test-gsm8k/test.jsonl
    # 每个评估 Prompt 的采样数量
-   --n-samples-per-eval-prompt 16
+   --n-samples-per-eval-prompt 4
    # 评估时最大响应长度
-   --eval-max-response-len 16384
+   --eval-max-response-len $max_response_len
    # 评估时采样参数
    --eval-top-p 0.7
 )
 
 ROLLOUT_ARGS=(
-   --prompt-data $hf_model_folder/dapo-math-17k/dapo-math-17k.jsonl
+   --prompt-data /root/shared_folder/math_datasets/train_math/train.jsonl
    --input-key prompt
    --label-key label
    --apply-chat-template
@@ -73,8 +82,8 @@ ROLLOUT_ARGS=(
    --num-rollout 100
    --rollout-batch-size 8
    --n-samples-per-prompt 8
-   --rollout-max-response-len 4096
-   --rollout-temperature 0.8
+   --rollout-max-response-len $max_response_len
+   --rollout-temperature 1.0
    --global-batch-size 64
 )
 
@@ -93,16 +102,9 @@ OPTIMIZER_ARGS=(
    --optimizer adam
    --lr 1e-6
    --lr-decay-style constant
-   --weight-decay 0.1
+   --weight-decay 0.01
    --adam-beta1 0.9
-   --adam-beta2 0.98
-)
-
-WANDB_ARGS=(
-   --use-wandb
-   --wandb-project slime-dev-mcore-fsdp
-   --wandb-group qwen3-4B-fsdp-1130-ref
-   --wandb-key ${WANDB_API_KEY}
+   --adam-beta2 0.999
 )
 
 SGLANG_ARGS=(
@@ -131,8 +133,15 @@ MISC_ARGS=(
    --actor-num-gpus-per-node $num_gpus
    --colocate
    --use-fault-tolerance
-   --dump-details /root/shared_data/$model_name-fsdp-1116-noref/dump_details
+   --dump-details /root/shared_folder/$model_name-fsdp-1116-noref/dump_details
    # --fsdp-cpu-offload
+)
+
+WANDB_ARGS=(
+   --use-wandb
+   --wandb-project slime-dev-mcore-fsdp
+   --wandb-group $wandb_group
+   --wandb-key ${WANDB_API_KEY}
 )
 
 # launch the master node of ray in container - 8 GPUs for training
@@ -147,6 +156,8 @@ RUNTIME_ENV_JSON="{
   }
 }"
 
+LOG_FILE="/root/shared_folder/logs/${model_name}-$(date +%Y%m%d_%H%M%S).log"
+echo "Logging to: $LOG_FILE"
 
 ray job submit --address="http://127.0.0.1:8265" \
    --runtime-env-json="${RUNTIME_ENV_JSON}" \
@@ -160,7 +171,7 @@ ray job submit --address="http://127.0.0.1:8265" \
    ${SGLANG_ARGS[@]} \
    ${TRAIN_BACKEND_ARGS[@]} \
    ${PERF_ARGS[@]} \
-   ${MISC_ARGS[@]}
+   ${MISC_ARGS[@]} 2>&1 | tee "$LOG_FILE" 
 
 
 
