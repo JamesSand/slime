@@ -292,9 +292,12 @@ def math_verify_from_sky(solution_str: str, ground_truth: str):
     # print(ground_truth)
     ground_truth = [ground_truth] if isinstance(ground_truth, str) else ground_truth
     try:
-        math_verify_parsed = parse(solution_str, parsing_timeout=10)
-    except Exception:
-        return scoring_config.incorrect_score
+        math_verify_parsed = parse(solution_str, parsing_timeout=None)
+    except Exception as e:
+        return {
+            "score": scoring_config.incorrect_score,
+            "info": f"error1: parsing error: {e}",
+        }
 
     # print(math_verify_parsed)
 
@@ -302,13 +305,19 @@ def math_verify_from_sky(solution_str: str, ground_truth: str):
 
     # 0 if parsing is problematic
     if len(math_verify_parsed) < 2:
-        return scoring_config.incorrect_score
+        return {
+            "score": scoring_config.incorrect_score,
+            "info": "error2: parsing problematic",
+        }
 
     # print(f"pass 2: {math_verify_parsed}")
 
     # We perform a quick string match first
     if math_verify_parsed[1] in ground_truth:
-        return scoring_config.correct_score
+        return {
+            "score": scoring_config.correct_score,
+            "info": "correct1",
+        }
     
     # print(f"pass 3: {math_verify_parsed}")
     
@@ -316,17 +325,23 @@ def math_verify_from_sky(solution_str: str, ground_truth: str):
     for gt in ground_truth:
         try:
             if m_verify(
-                parse(f"\\boxed{{{gt}}}", parsing_timeout=10),
+                parse(f"\\boxed{{{gt}}}", parsing_timeout=None),
                 math_verify_parsed,
                 timeout_seconds=10,
             ):
-                return scoring_config.correct_score
+                return {
+                    "score": scoring_config.correct_score,
+                    "info": "correct2",
+                }
         except Exception:
             continue
     # print(f"pass 4: {math_verify_parsed}")
     
     # Very unlikely to be correct after the above matches
-    return scoring_config.incorrect_score
+    return {
+        "score": scoring_config.incorrect_score,
+        "info": "error3: final error",
+    }
 
 # NOTE(hanqing): new compute_score
 def compute_score(
@@ -337,18 +352,21 @@ def compute_score(
     is_longcot: bool = False,
     is_use_math_verify: bool = False,
 ) -> float:
-    # LongCoT sanity checks (unchanged)
-    if is_longcot:
-        if ("</think>" not in solution_str):
-            return scoring_config.wo_eos_think
-        if ("<think>" not in solution_str):
-            return scoring_config.wo_bos_think
+    
+    # Zhizhou: I comment this due to we use long cot = False and use math verify = True
+    
+    # # LongCoT sanity checks (unchanged)
+    # if is_longcot:
+    #     if ("</think>" not in solution_str):
+    #         return scoring_config.wo_eos_think
+    #     if ("<think>" not in solution_str):
+    #         return scoring_config.wo_bos_think
 
-    if not is_use_math_verify:
-        # ✅ Minerva/strict path gets the FULL string
-        correct, _pred = verify(solution_str, ground_truth,
-                                strict_box_verify, pause_tokens_index)
-        return scoring_config.correct_score if correct else scoring_config.incorrect_score
+    # if not is_use_math_verify:
+    #     # ✅ Minerva/strict path gets the FULL string
+    #     correct, _pred = verify(solution_str, ground_truth,
+    #                             strict_box_verify, pause_tokens_index)
+    #     return scoring_config.correct_score if correct else scoring_config.incorrect_score
 
     # ✅ math-verify path: parse only a small tail for speed
     tail = solution_str[-500:]
@@ -356,13 +374,35 @@ def compute_score(
     if boxed is None:
         # fallback: try Minerva 'Answer:' pattern from the FULL string
         correct, _pred = is_correct_minerva(solution_str, ground_truth)
-        return scoring_config.correct_score if correct else scoring_config.incorrect_score
+        
+        ret_info = None
+        ret = scoring_config.correct_score if correct else scoring_config.incorrect_score
+    else:
+        # Keep the boxed wrapper as expected by your parser
+        # (math_verify_from_sky expects a string it can parse; you already pass boxed or full string)
+        # Here we pass the boxed segment only:
+        ret_dict = math_verify_from_sky(boxed, ground_truth)
+        
+        ret_info = ret_dict["info"]
+        ret = ret_dict["score"]
+        
 
-    # Keep the boxed wrapper as expected by your parser
-    # (math_verify_from_sky expects a string it can parse; you already pass boxed or full string)
-    # Here we pass the boxed segment only:
-    reward = math_verify_from_sky(boxed, ground_truth)
-    return reward
+    # debug_str = (
+    #     f"\n{'='*50}\n"
+    #     f"DEBUG INFO for compute_score\n"
+    #     f"{'-'*50}\n"
+    #     f"SOLUTION STR:\n{solution_str}\n"
+    #     f"{'-'*50}\n"
+    #     f"EXTRACTED BOXED: {boxed}\n"
+    #     f"GROUND TRUTH: {ground_truth}\n"
+    #     f"SCORE RETURNED: {ret}\n"
+    #     f"INFO: {ret_info}\n"
+    #     f"{'='*50}\n"
+    # )
+    
+    # print(debug_str)
+    
+    return ret
 
 
 ### more test
@@ -521,18 +561,28 @@ def run(is_use_math_verify: bool):
 
 # test the compute_score function
 if __name__ == '__main__':
-    solution_str = "Assistant: Here is the solution to the problem.\n $$\\frac{1}{2} + 7c$$\n The answer is \[ \\boxed{\\frac{1}{2} + 32c}. \]"
-    ground_truth = "\\frac{1}{2} + 32c"
-    print(compute_score(solution_str, ground_truth, is_use_math_verify=True)) #1.0
-    ground_truth = "\\frac{1}{3}"
-    print(compute_score(solution_str, ground_truth, is_use_math_verify=True)) #0.1
+    # solution_str = "Assistant: Here is the solution to the problem.\n $$\\frac{1}{2} + 7c$$\n The answer is \[ \\boxed{\\frac{1}{2} + 32c}. \]"
+    # ground_truth = "\\frac{1}{2} + 32c"
+    # print(compute_score(solution_str, ground_truth, is_use_math_verify=True)) #1.0
+    # ground_truth = "\\frac{1}{3}"
+    # print(compute_score(solution_str, ground_truth, is_use_math_verify=True)) #0.1
 
-    solution_str = "The answer is \\boxed{1/2}"
-    ground_truth = "\\frac{1}{2}"
-    print(compute_score(solution_str, ground_truth, is_use_math_verify=True)) #0
+    # solution_str = "The answer is \\boxed{1/2}"
+    # ground_truth = "\\frac{1}{2}"
+    # print(compute_score(solution_str, ground_truth, is_use_math_verify=True)) #0
 
-    run(is_use_math_verify=False)
-    run(is_use_math_verify=True)
+    # run(is_use_math_verify=False)
+    # run(is_use_math_verify=True)
+    
+    # solution_str = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 27 Dec 2025\n\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nSimplify the product \\[\\frac{8}{4}\\cdot\\frac{12}{8}\\cdot\\frac{16}{12} \\dotsm \\frac{4n+4}{4n} \\dotsm \\frac{2008}{2004}.\\] Let's think step by step and output the final answer within \\boxed{}.<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nThe terms cancel to $\\frac{2008}{4}$.  \n\nSo the answer is $\\frac{2008}{4}$ which is $\\boxed{502}$<|eot_id|>"
+    # ground_truth = "502"
+    
+    solution_str = "$\\boxed{-50}$<|eot_id|>"
+    ground_truth = "-50"
+    
+    
+    print(compute_score(solution_str, ground_truth, is_use_math_verify=True)) 
+    
 
 
 # def compute_score(
@@ -609,6 +659,21 @@ async def hanqing_reward_function(args, sample: Sample, **kwargs):
             is_longcot=False,
             is_use_math_verify=True
         )
+        
+        # # 将所有信息构建为一个完整的格式化字符串
+        # debug_str = (
+        #     f"\n{'='*50}\n"
+        #     f"DEBUG INFO for Sample Index: {getattr(sample, 'index', 'N/A')}\n"
+        #     f"{'-'*50}\n"
+        #     f"RESPONSE:\n{response}\n"
+        #     f"{'-'*50}\n"
+        #     f"GROUND TRUTH: {label}\n"
+        #     f"SCORE RESULT: {score_result}\n"
+        #     f"{'='*50}\n"
+        # )
+        
+        # # 一次性打印，防止并发
+        # print(debug_str)
         
         return score_result
         
