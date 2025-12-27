@@ -28,13 +28,13 @@ RAY_DASHBOARD_PORT=$(get_free_port)
 
 # will prevent ray from buffering stdout/stderr
 export PYTHONBUFFERED=16
-# export CUDA_VISIBLE_DEVICES=0,1
+export CUDA_VISIBLE_DEVICES=0,1,2,3
 # export CUDA_VISIBLE_DEVICES=2,3
 
 
 source .env
 
-num_gpus=2
+num_gpus=4
 hf_model_folder=/root/shared_folder/hf_models
 model_name=Llama-3.2-3B-Instruct
 
