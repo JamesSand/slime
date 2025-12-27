@@ -566,6 +566,12 @@ def _log_eval_rollout_data(rollout_id, args, data, extra_metrics: dict[str, Any]
     for key in data.keys():
         rewards = data[key]["rewards"]
         log_dict[f"eval/{key}"] = sum(rewards) / len(rewards)
+        
+        # Zhizhou: I add this binary reward accuracy metric for math tasks
+        # Convert rewards to binary: <= 0 -> 0, > 0 -> 1
+        binary_rewards = [1 if r > 0 else 0 for r in rewards]
+        log_dict[f"eval/acc-{key}"] = sum(binary_rewards) / len(binary_rewards)
+        
         if (samples := data[key].get("samples")) is not None:
             log_dict |= dict_add_prefix(compute_metrics_from_samples(args, samples), f"eval/{key}/")
         if "truncated" in data[key]:

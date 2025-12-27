@@ -48,3 +48,6 @@ async def _main_async(samples, custom_rm_path):
 
 if __name__ == "__main__":
     typer.run(main)
+
+
+
