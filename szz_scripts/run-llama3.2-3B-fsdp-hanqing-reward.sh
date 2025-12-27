@@ -39,7 +39,7 @@ hf_model_folder=/root/shared_folder/hf_models
 model_name=Llama-3.2-3B-Instruct
 
 # Zhizhou: I think this is the wandb run name
-wandb_group=llama3.2-3B-fsdp-math-adam
+wandb_group=llama3.2-3B-fsdp-math-adam-hanqing-reward
 
 base_save_folder=/root/shared_folder/$wandb_group
 ckpt_save_folder=$base_save_folder/checkpoints
@@ -100,7 +100,8 @@ ROLLOUT_ARGS=(
    --apply-chat-template
    --rollout-shuffle
    --balance-data
-   --rm-type deepscaler
+   # --rm-type deepscaler
+   --custom-rm-path szz_utils.hanqing_custom_rm.hanqing_reward_function
    --num-rollout 100
    --rollout-batch-size 8
    --n-samples-per-prompt 8
