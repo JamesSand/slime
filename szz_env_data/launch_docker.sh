@@ -1,6 +1,5 @@
 
 # alias slime="docker exec -it slime_zhizhou bash"
-
 # alias killslime="docker rm -f slime_zhizhou"
 
 # setup docker
@@ -11,7 +10,7 @@ ssd=ssd1 docker run --privileged --gpus all --ipc=host --shm-size=16g \
   -v /$ssd/zhizhou/tmp:/tmp \
   -v ~/.tmux.conf:/root/.tmux.conf \
   --name slime_zhizhou \
-  -itd slimerl/slime:latest /bin/bash
+  -itd jamessand42/slime:szz-rl /bin/bash
 
 # docker commit
 
